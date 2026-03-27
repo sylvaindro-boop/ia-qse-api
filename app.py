@@ -104,6 +104,6 @@ Règles :
     response_ai = requests.post(url_ai, headers=headers_ai, json=data_ai)
     result = response_ai.json()
 
-    texte = result["output"][0]["content"][0]["text"]
+    texte = result["choices"][0]["message"]["content"]
 
     return {"resultat": texte}
