@@ -103,9 +103,14 @@ MESURE_EFFICACITE=
         "temperature": 0.3
     }
 
-    response_ai = requests.post(url_ai, headers=headers_ai, json=data_ai)
-    result = response_ai.json()
+response_ai = requests.post(url_ai, headers=headers_ai, json=data_ai)
+result = response_ai.json()
 
+print(result)  # 👈 IMPORTANT pour voir l'erreur dans logs
+
+if "choices" in result:
     texte = result["choices"][0]["message"]["content"]
+else:
+    texte = "ERREUR OPENAI : " + str(result)
 
     return {"resultat": texte}
