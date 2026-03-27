@@ -9,7 +9,8 @@ CLIENT_SECRET = "nEH8Q~eREPIlWz2wrN.YZFennIw2efl8qFFreau1"
 
 SITE_ID = "397a5d9b-d3ee-41f8-b105-5049851c80a1"
 LIST_ID = "862e787a-2ef4-4cb9-8fac-9b7c64afeeeb"
-OPENAI_API_KEY = "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"
+import os
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 @app.get("/")
 def root():
