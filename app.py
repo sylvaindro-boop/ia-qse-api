@@ -11,12 +11,13 @@ CLIENT_SECRET = "nEH8Q~eREPIlWz2wrN.YZFennIw2efl8qFFreau1"
 SITE_ID = "397a5d9b-d3ee-41f8-b105-5049851c80a1"
 LIST_ID = "862e787a-2ef4-4cb9-8fac-9b7c64afeeeb"
 
+# ===== OPENAI =====
 OPENAI_API_KEY = "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"
 
 @app.get("/analyse")
 def analyse(constat: str):
 
-    # ===== AUTHENTIFICATION =====
+    # ===== AUTHENTIFICATION AZURE =====
     token_url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
 
     token_data = {
@@ -39,7 +40,7 @@ def analyse(constat: str):
     response = requests.get(url, headers=headers)
     data = response.json()
 
-    # ===== MEMOIRE =====
+    # ===== CONSTRUCTION MEMOIRE =====
     memoire = ""
     count = 0
 
@@ -61,22 +62,33 @@ Action : {fields.get("ActionCorrective_Finale")}
         if count >= 3:
             break
 
-    # ===== PROMPT =====
+    # ===== PROMPT FORMAT EXCEL =====
     prompt = f"""
 Tu es un expert QSE terrain.
 
-Base-toi sur ces cas réels :
+IMPORTANT :
+Tu dois répondre STRICTEMENT avec ces 6 lignes, sans texte avant ni après :
+
+CONSTAT=...
+ACTION_IMMEDIATE=...
+ANALYSE=...
+CAUSE_RACINE=...
+ACTION_CORRECTIVE=...
+MESURE_EFFICACITE=...
+
+Base-toi sur les cas réels :
 {memoire}
 
 Nouveau constat :
 {constat}
 
-Donne :
-1. Cause racine terrain
-2. Action corrective concrète
+Règles :
+- Cause racine = typologie simple (pas de phrase)
+- Actions concrètes terrain
+- Pas de blabla
 """
 
-    # ===== OPENAI =====
+    # ===== APPEL OPENAI =====
     url_ai = "https://api.openai.com/v1/responses"
 
     headers_ai = {
