@@ -11,6 +11,7 @@ SITE_ID = "397a5d9b-d3ee-41f8-b105-5049851c80a1"
 LIST_ID = "862e787a-2ef4-4cb9-8fac-9b7c64afeeeb"
 import os
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+print("OPENAI_API_KEY =", OPENAI_API_KEY)
 
 @app.get("/")
 def root():
