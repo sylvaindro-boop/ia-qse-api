@@ -40,18 +40,16 @@ def analyse(constat: str):
     response = requests.get(url, headers=headers)
     data = response.json()
 
-    # ===== CONSTRUCTION MEMOIRE =====
+    # ===== MEMOIRE =====
     memoire = ""
     count = 0
 
-    for item in data["value"]:
-        fields = item["fields"]
+    for item in data.get("value", []):
+        fields = item.get("fields", {})
 
-        title = fields.get("Title", "").lower()
-        cause = fields.get("Cause_Finale")
-
-        if "déchets" in title and cause:
+        if "déchets" in fields.get("Title", "").lower():
             memoire += f"""
+CAS REEL :
 Constat : {fields.get("Title")}
 Cause : {fields.get("Cause_Finale")}
 Action : {fields.get("ActionCorrective_Finale")}
@@ -62,34 +60,35 @@ Action : {fields.get("ActionCorrective_Finale")}
         if count >= 3:
             break
 
-    # ===== PROMPT FORMAT EXCEL =====
+    # ===== PROMPT =====
     prompt = f"""
 Tu es un expert QSE terrain.
 
-IMPORTANT :
-Tu dois répondre STRICTEMENT avec ces 6 lignes, sans texte avant ni après :
-
-CONSTAT=...
-ACTION_IMMEDIATE=...
-ANALYSE=...
-CAUSE_RACINE=...
-ACTION_CORRECTIVE=...
-MESURE_EFFICACITE=...
-
-Base-toi sur les cas réels :
-{memoire}
-
-Nouveau constat :
-{constat}
+Tu dois répondre SIMPLE, CONCRET, PRATIQUE.
 
 Règles :
-- Cause racine = typologie simple (pas de phrase)
-- Actions concrètes terrain
+- Cause racine = courte (pas de phrase)
+- Actions terrain réelles
 - Pas de blabla
+
+EXEMPLES :
+{memoire}
+
+NOUVEAU CAS :
+Constat : {constat}
+
+Réponds EXACTEMENT comme ça :
+
+CONSTAT=
+ACTION_IMMEDIATE=
+ANALYSE=
+CAUSE_RACINE=
+ACTION_CORRECTIVE=
+MESURE_EFFICACITE=
 """
 
-    # ===== APPEL OPENAI =====
-    url_ai = "https://api.openai.com/v1/responses"
+    # ===== OPENAI =====
+    url_ai = "https://api.openai.com/v1/chat/completions"
 
     headers_ai = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -98,7 +97,10 @@ Règles :
 
     data_ai = {
         "model": "gpt-4.1-mini",
-        "input": prompt
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.3
     }
 
     response_ai = requests.post(url_ai, headers=headers_ai, json=data_ai)
