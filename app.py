@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 import requests
+import os
 
 app = FastAPI()
 
@@ -9,35 +10,40 @@ CLIENT_SECRET = "nEH8Q~eREPIlWz2wrN.YZFennIw2efl8qFFreau1"
 
 SITE_ID = "397a5d9b-d3ee-41f8-b105-5049851c80a1"
 LIST_ID = "862e787a-2ef4-4cb9-8fac-9b7c64afeeeb"
-import os
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-print("OPENAI_API_KEY =", OPENAI_API_KEY)
+
 
 @app.get("/")
 def root():
     return {"status": "ok", "message": "API vivante"}
 
+
+def get_access_token():
+    token_url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
+    token_data = {
+        "grant_type": "client_credentials",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "scope": "https://graph.microsoft.com/.default"
+    }
+
+    token_response = requests.post(token_url, data=token_data, timeout=30)
+    token_json = token_response.json()
+
+    if "access_token" not in token_json:
+        return None, token_json
+
+    return token_json["access_token"], None
+
+
 @app.get("/analyse")
 def analyse(constat: str):
     try:
-        # AUTH AZURE
-        token_url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
-        token_data = {
-            "grant_type": "client_credentials",
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "scope": "https://graph.microsoft.com/.default"
-        }
+        access_token, token_error = get_access_token()
+        if not access_token:
+            return {"resultat": "ERREUR AZURE TOKEN : " + str(token_error)}
 
-        token_response = requests.post(token_url, data=token_data, timeout=30)
-        token_json = token_response.json()
-
-        if "access_token" not in token_json:
-            return {"resultat": "ERREUR AZURE TOKEN : " + str(token_json)}
-
-        access_token = token_json["access_token"]
-
-        # SHAREPOINT
         sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items?expand=fields"
         sp_headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -67,7 +73,6 @@ Action : {fields.get("ActionCorrective_Finale", "")}
             if count >= 3:
                 break
 
-        # OPENAI
         prompt = f"""
 Tu es un expert QSE terrain.
 
@@ -116,59 +121,9 @@ Règles :
 
     except Exception as e:
         return {"resultat": "ERREUR PYTHON : " + str(e)}
-from fastapi import Request
 
-@app.post("/memoire")
-async def memoire(request: Request):
 
-    data_input = await request.json()
-
-    try:
-        # ===== AUTH AZURE =====
-        token_url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
-
-        token_data = {
-            "grant_type": "client_credentials",
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "scope": "https://graph.microsoft.com/.default"
-        }
-
-        token_response = requests.post(token_url, data=token_data)
-        access_token = token_response.json().get("access_token")
-
-        # ===== PREPARATION DONNEES =====
-        fields = {
-            "Title": data_input.get("Constat"),
-            "Client": data_input.get("Client"),
-            "Source": data_input.get("Source"),
-            "Activite": data_input.get("Activite"),
-            "ActionImmediate_Finale": data_input.get("ActionImmediate"),
-            "Cause_Finale": data_input.get("Cause"),
-            "ActionCorrective_Finale": data_input.get("ActionCorrective"),
-            "MesureEfficacite_Finale": data_input.get("MesureEfficacite"),
-            "QualiteCas": "IA"
-        }
-
-        # ===== ECRITURE SHAREPOINT =====
-        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "fields": fields
-        }
-
-        response = requests.post(url, headers=headers, json=payload)
-
-        return {"status": "ok", "sharepoint": response.json()}
-
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-        @app.get("/memoire_test")
+@app.get("/memoire_test")
 def memoire_test():
     data_input = {
         "Constat": "Test déchets chantier",
@@ -182,21 +137,9 @@ def memoire_test():
     }
 
     try:
-        token_url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
-        token_data = {
-            "grant_type": "client_credentials",
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "scope": "https://graph.microsoft.com/.default"
-        }
-
-        token_response = requests.post(token_url, data=token_data)
-        token_json = token_response.json()
-
-        if "access_token" not in token_json:
-            return {"status": "error", "step": "token", "detail": token_json}
-
-        access_token = token_json["access_token"]
+        access_token, token_error = get_access_token()
+        if not access_token:
+            return {"status": "error", "step": "token", "detail": token_error}
 
         fields = {
             "Title": data_input.get("Constat"),
@@ -209,18 +152,19 @@ def memoire_test():
             "MesureEfficacite_Finale": data_input.get("MesureEfficacite")
         }
 
-        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-        headers = {
+        sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+        sp_headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json"
         }
         payload = {"fields": fields}
 
-        response = requests.post(url, headers=headers, json=payload)
+        sp_response = requests.post(sp_url, headers=sp_headers, json=payload, timeout=30)
+
         return {
             "status": "ok",
-            "http_status": response.status_code,
-            "detail": response.json()
+            "http_status": sp_response.status_code,
+            "detail": sp_response.json()
         }
 
     except Exception as e:
