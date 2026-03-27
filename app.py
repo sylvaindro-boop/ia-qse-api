@@ -168,3 +168,60 @@ async def memoire(request: Request):
 
     except Exception as e:
         return {"status": "error", "message": str(e)}
+        @app.get("/memoire_test")
+def memoire_test():
+    data_input = {
+        "Constat": "Test déchets chantier",
+        "Client": "Test client",
+        "Source": "Audit chantier",
+        "Activite": "Déchets",
+        "ActionImmediate": "Nettoyage immédiat",
+        "Cause": "Rigueur",
+        "ActionCorrective": "Rappel des consignes",
+        "MesureEfficacite": "Contrôle terrain"
+    }
+
+    try:
+        token_url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
+        token_data = {
+            "grant_type": "client_credentials",
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "scope": "https://graph.microsoft.com/.default"
+        }
+
+        token_response = requests.post(token_url, data=token_data)
+        token_json = token_response.json()
+
+        if "access_token" not in token_json:
+            return {"status": "error", "step": "token", "detail": token_json}
+
+        access_token = token_json["access_token"]
+
+        fields = {
+            "Title": data_input.get("Constat"),
+            "Client": data_input.get("Client"),
+            "Source": data_input.get("Source"),
+            "Activite": data_input.get("Activite"),
+            "ActionImmediate_Finale": data_input.get("ActionImmediate"),
+            "Cause_Finale": data_input.get("Cause"),
+            "ActionCorrective_Finale": data_input.get("ActionCorrective"),
+            "MesureEfficacite_Finale": data_input.get("MesureEfficacite")
+        }
+
+        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        payload = {"fields": fields}
+
+        response = requests.post(url, headers=headers, json=payload)
+        return {
+            "status": "ok",
+            "http_status": response.status_code,
+            "detail": response.json()
+        }
+
+    except Exception as e:
+        return {"status": "error", "step": "python", "detail": str(e)}
