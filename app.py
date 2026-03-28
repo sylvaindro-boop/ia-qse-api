@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
 import os
+import re
+import unicodedata
 
 app = FastAPI()
 
@@ -131,6 +133,155 @@ def build_sharepoint_fields_from_payload(data: MemoirePayload):
     }
 
 
+def normalize_text(txt):
+    if txt is None:
+        return ""
+
+    txt = str(txt).lower().strip()
+    txt = unicodedata.normalize("NFD", txt)
+    txt = "".join(c for c in txt if unicodedata.category(c) != "Mn")
+    txt = re.sub(r"[^a-z0-9\s]", " ", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
+
+
+def extract_keywords(txt):
+    stopwords = {
+        "de", "des", "du", "le", "la", "les", "un", "une", "et", "ou", "a", "au",
+        "aux", "sur", "dans", "par", "pour", "avec", "sans", "en", "d", "l",
+        "est", "sont", "etre", "avoir", "plus", "moins", "tres", "non", "pas",
+        "qui", "que", "quoi", "dont", "se", "ce", "cet", "cette", "ces"
+    }
+
+    txt = normalize_text(txt)
+    mots = txt.split()
+
+    resultat = []
+    for mot in mots:
+        if len(mot) >= 4 and mot not in stopwords:
+            resultat.append(mot)
+
+    return list(dict.fromkeys(resultat))
+
+
+def score_case(constat, fields):
+    score = 0
+
+    constat_txt = normalize_text(constat)
+    constat_keywords = extract_keywords(constat)
+
+    title = normalize_text(fields.get("Title", ""))
+    activite = normalize_text(fields.get("Activite", ""))
+    source = normalize_text(fields.get("Source", ""))
+    tags = normalize_text(fields.get("Tags", ""))
+    action_immediate = normalize_text(fields.get("ActionImmediate_Finale", ""))
+    cause = normalize_text(fields.get("Cause_Finale", ""))
+    action_corrective = normalize_text(fields.get("ActionCorrective_Finale", ""))
+    mesure = normalize_text(fields.get("MesureEfficacite_Finale", ""))
+
+    bloc = " ".join([
+        title,
+        activite,
+        source,
+        tags,
+        action_immediate,
+        cause,
+        action_corrective,
+        mesure
+    ])
+
+    for mot in constat_keywords:
+        if mot in title:
+            score += 8
+        if mot in activite:
+            score += 5
+        if mot in tags:
+            score += 4
+        if mot in source:
+            score += 3
+        if mot in cause:
+            score += 3
+        if mot in action_corrective:
+            score += 2
+        if mot in action_immediate:
+            score += 2
+        if mot in mesure:
+            score += 1
+
+    if constat_txt and constat_txt in bloc:
+        score += 10
+
+    qualite = fields.get("QualiteCas", "")
+    modifie = fields.get("ModifieParHumain", False)
+
+    if str(qualite).strip().lower() == "reference":
+        score += 8
+    elif str(qualite).strip().lower() == "bon":
+        score += 4
+    elif str(qualite).strip().lower() == "faible":
+        score -= 3
+
+    if modifie is True:
+        score += 5
+
+    return score
+
+
+def build_memory_context(constat, items, limit=5):
+    scored = []
+
+    for item in items:
+        fields = item.get("fields", {})
+        if not fields:
+            continue
+
+        titre = str(fields.get("Title", "")).strip()
+        if titre == "":
+            continue
+
+        s = score_case(constat, fields)
+        scored.append((s, fields))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    meilleurs = []
+    for s, f in scored:
+        if len(meilleurs) >= limit:
+            break
+        meilleurs.append((s, f))
+
+    if len(meilleurs) == 0:
+        return "Aucun cas antérieur pertinent trouvé dans SharePoint."
+
+    blocs = []
+    rang = 1
+
+    for s, f in meilleurs:
+        bloc = f"""
+CAS REEL {rang} :
+Score pertinence : {s}
+Constat : {f.get("Title", "")}
+Client : {f.get("Client", "")}
+Source : {f.get("Source", "")}
+Activite : {f.get("Activite", "")}
+Action immédiate IA : {f.get("ActionImmediate_IA", "")}
+Action immédiate finale : {f.get("ActionImmediate_Finale", "")}
+Cause IA : {f.get("Cause_IA", "")}
+Cause finale : {f.get("Cause_Finale", "")}
+Typologie finale : {f.get("Typologie_Finale", "")}
+Action corrective finale : {f.get("ActionCorrective_Finale", "")}
+Mesure efficacité finale : {f.get("MesureEfficacite_Finale", "")}
+Modifié par humain : {f.get("ModifieParHumain", "")}
+Qualité du cas : {f.get("QualiteCas", "")}
+Tags : {f.get("Tags", "")}
+---
+"""
+        blocs.append(bloc)
+        rang += 1
+
+    return "\n".join(blocs)
+
+
 @app.get("/analyse")
 def analyse(constat: str):
     try:
@@ -147,27 +298,8 @@ def analyse(constat: str):
         if "value" not in sp_json:
             return {"resultat": "ERREUR SHAREPOINT : " + str(sp_json)}
 
-        memoire = ""
-        count = 0
-
-        for item in sp_json.get("value", []):
-            fields = item.get("fields", {})
-            title = fields.get("Title", "")
-
-            if "déchets" in title.lower():
-                memoire += f"""
-CAS REEL :
-Constat : {fields.get("Title", "")}
-Action immédiate : {fields.get("ActionImmediate_Finale", "")}
-Cause : {fields.get("Cause_Finale", "")}
-Action : {fields.get("ActionCorrective_Finale", "")}
-Mesure efficacité : {fields.get("MesureEfficacite_Finale", "")}
----
-"""
-                count += 1
-
-            if count >= 3:
-                break
+        items = sp_json.get("value", [])
+        memoire = build_memory_context(constat, items, limit=5)
 
         prompt = f"""
 Tu es un expert QSE terrain.
@@ -181,7 +313,13 @@ CAUSE_RACINE=
 ACTION_CORRECTIVE=
 MESURE_EFFICACITE=
 
-Base-toi sur les cas réels suivants :
+Tu dois t'inspirer des cas réels les plus pertinents issus de la mémoire SharePoint.
+Privilégie les cas avec :
+- score élevé
+- Qualité du cas = Bon ou Reference
+- Modifié par humain = True
+
+Mémoire SharePoint :
 {memoire}
 
 Nouveau constat :
@@ -191,6 +329,8 @@ Règles :
 - Cause racine courte
 - Actions concrètes terrain
 - Pas de blabla
+- Rester réaliste chantier
+- Si un bon cas proche existe, réutilise sa logique
 """
 
         ai_url = "https://api.openai.com/v1/chat/completions"
@@ -203,7 +343,7 @@ Règles :
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.3
+            "temperature": 0.2
         }
 
         ai_response = requests.post(ai_url, headers=ai_headers, json=ai_data, timeout=60)
@@ -316,7 +456,7 @@ def memoire_test():
         ModifieParHumain="Non",
         QualiteCas="Bon",
         Tags="dechets;chantier",
-        NomFichierSource="Portail_Battaglino-Déconstruction_V5.xlsm"
+        NomFichierSource="Portail_Battaglino-Déconstruction_V6.xlsm"
     )
 
     try:
