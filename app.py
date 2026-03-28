@@ -72,6 +72,65 @@ def get_headers(access_token):
     }
 
 
+def normalize_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    if value is None:
+        return False
+
+    txt = str(value).strip().lower()
+
+    if txt in ["oui", "true", "1", "vrai", "yes"]:
+        return True
+
+    if txt in ["non", "false", "0", "faux", "no", ""]:
+        return False
+
+    return False
+
+
+def normalize_qualite(value):
+    if value is None:
+        return "Bon"
+
+    txt = str(value).strip().lower()
+
+    if txt == "faible":
+        return "Faible"
+    if txt == "bon":
+        return "Bon"
+    if txt in ["reference", "référence", "ref"]:
+        return "Reference"
+
+    return "Bon"
+
+
+def build_sharepoint_fields_from_payload(data: MemoirePayload):
+    return {
+        "Title": data.Constat,
+        "Client": data.Client,
+        "Source": data.Source,
+        "Activite": data.Activite,
+        "DateCas": data.DateCas,
+
+        "ActionImmediate_IA": data.ActionImmediate_IA,
+        "ActionImmediate_Finale": data.ActionImmediate_Finale,
+
+        "Cause_IA": data.Cause_IA,
+        "Cause_Finale": data.Cause_Finale,
+        "Typologie_Finale": data.Typologie_Finale,
+
+        "ActionCorrective_Finale": data.ActionCorrective_Finale,
+        "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
+
+        "ModifieParHumain": normalize_bool(data.ModifieParHumain),
+        "QualiteCas": normalize_qualite(data.QualiteCas),
+        "Tags": data.Tags,
+        "NomFichierSource": data.NomFichierSource
+    }
+
+
 @app.get("/analyse")
 def analyse(constat: str):
     try:
@@ -99,8 +158,10 @@ def analyse(constat: str):
                 memoire += f"""
 CAS REEL :
 Constat : {fields.get("Title", "")}
+Action immédiate : {fields.get("ActionImmediate_Finale", "")}
 Cause : {fields.get("Cause_Finale", "")}
 Action : {fields.get("ActionCorrective_Finale", "")}
+Mesure efficacité : {fields.get("MesureEfficacite_Finale", "")}
 ---
 """
                 count += 1
@@ -190,16 +251,7 @@ def memoire(data: MemoirePayload):
         if not access_token:
             return {"status": "error", "step": "token", "detail": token_error}
 
-        fields = {
-            "Title": data.Constat,
-            "Client": data.Client,
-            "Source": data.Source,
-            "Activite": data.Activite,
-            "ActionImmediate_Finale": data.ActionImmediate_Finale,
-            "Cause_Finale": data.Cause_Finale,
-            "ActionCorrective_Finale": data.ActionCorrective_Finale,
-            "MesureEfficacite_Finale": data.MesureEfficacite_Finale
-        }
+        fields = build_sharepoint_fields_from_payload(data)
 
         sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
         payload = {"fields": fields}
@@ -236,60 +288,43 @@ def memoire(data: MemoirePayload):
         return {"status": "error", "step": "python", "detail": str(e)}
 
 
-@app.get("/memoire_test_min")
-def memoire_test_min():
+@app.get("/memoire_test")
+def memoire_test():
+    data_input = MemoirePayload(
+        Constat="Test déchets chantier",
+        Client="Test client",
+        Source="Audit chantier",
+        Activite="Déchets",
+        DateCas="2026-03-28",
+
+        ActionImmediate_IA="Nettoyage immédiat",
+        ActionImmediate_Finale="Nettoyage immédiat",
+
+        Analyse_IA="Tri non respecté",
+        Analyse_Finale="Tri non respecté",
+
+        Cause_IA="Rigueur",
+        Cause_Finale="Rigueur",
+        Typologie_Finale="Rigueur",
+
+        ActionCorrective_IA="Rappel des consignes",
+        ActionCorrective_Finale="Rappel des consignes",
+
+        MesureEfficacite_IA="Contrôle terrain",
+        MesureEfficacite_Finale="Contrôle terrain",
+
+        ModifieParHumain="Non",
+        QualiteCas="Bon",
+        Tags="dechets;chantier",
+        NomFichierSource="Portail_Battaglino-Déconstruction_V5.xlsm"
+    )
+
     try:
         access_token, token_error = get_access_token()
         if not access_token:
             return {"status": "error", "step": "token", "detail": token_error}
 
-        fields = {
-            "Title": "Test minimal chantier"
-        }
-
-        sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-        payload = {"fields": fields}
-
-        sp_response = requests.post(
-            sp_url,
-            headers=get_headers(access_token),
-            json=payload,
-            timeout=30
-        )
-
-        try:
-            detail = sp_response.json()
-        except Exception:
-            detail = sp_response.text
-
-        return {
-            "status": "ok" if sp_response.status_code in [200, 201] else "error",
-            "http_status": sp_response.status_code,
-            "detail": detail,
-            "payload_sent": payload
-        }
-
-    except Exception as e:
-        return {"status": "error", "step": "python", "detail": str(e)}
-
-
-@app.get("/memoire_test_full")
-def memoire_test_full():
-    try:
-        access_token, token_error = get_access_token()
-        if not access_token:
-            return {"status": "error", "step": "token", "detail": token_error}
-
-        fields = {
-            "Title": "Test déchets chantier",
-            "Client": "Test client",
-            "Source": "Audit chantier",
-            "Activite": "Déchets",
-            "ActionImmediate_Finale": "Nettoyage immédiat",
-            "Cause_Finale": "Rigueur",
-            "ActionCorrective_Finale": "Rappel des consignes",
-            "MesureEfficacite_Finale": "Contrôle terrain"
-        }
+        fields = build_sharepoint_fields_from_payload(data_input)
 
         sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
         payload = {"fields": fields}
