@@ -17,7 +17,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 class MemoirePayload(BaseModel):
     Constat: str = ""
-    Client: str = ""
     Source: str = ""
     Activite: str = ""
     DateCas: str = ""
@@ -28,8 +27,7 @@ class MemoirePayload(BaseModel):
     Analyse_IA: str = ""
     Analyse_Finale: str = ""
 
-    Cause_IA: str = ""
-    Cause_Finale: str = ""
+    Typologie_IA: str = ""
     Typologie_Finale: str = ""
 
     ActionCorrective_IA: str = ""
@@ -48,7 +46,6 @@ class MemoireUpdatePayload(BaseModel):
     SharePointID: str = ""
     ActionImmediate_Finale: str = ""
     Analyse_Finale: str = ""
-    Cause_Finale: str = ""
     Typologie_Finale: str = ""
     ActionCorrective_Finale: str = ""
     MesureEfficacite_Finale: str = ""
@@ -121,7 +118,6 @@ def normalize_qualite(value):
 def build_sharepoint_fields_from_payload(data: MemoirePayload):
     return {
         "Title": data.Constat,
-        "Client": data.Client,
         "Source": data.Source,
         "Activite": data.Activite,
         "DateCas": data.DateCas,
@@ -129,11 +125,16 @@ def build_sharepoint_fields_from_payload(data: MemoirePayload):
         "ActionImmediate_IA": data.ActionImmediate_IA,
         "ActionImmediate_Finale": data.ActionImmediate_Finale,
 
-        "Cause_IA": data.Cause_IA,
-        "Cause_Finale": data.Cause_Finale,
+        "Analyse_IA": data.Analyse_IA,
+        "Analyse_Finale": data.Analyse_Finale,
+
+        "Typologie_IA": data.Typologie_IA,
         "Typologie_Finale": data.Typologie_Finale,
 
+        "ActionCorrective_IA": data.ActionCorrective_IA,
         "ActionCorrective_Finale": data.ActionCorrective_Finale,
+
+        "MesureEfficacite_IA": data.MesureEfficacite_IA,
         "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
 
         "ModifieParHumain": normalize_bool(data.ModifieParHumain),
@@ -146,7 +147,7 @@ def build_sharepoint_fields_from_payload(data: MemoirePayload):
 def build_sharepoint_update_fields(data: MemoireUpdatePayload):
     return {
         "ActionImmediate_Finale": data.ActionImmediate_Finale,
-        "Cause_Finale": data.Cause_Finale,
+        "Analyse_Finale": data.Analyse_Finale,
         "Typologie_Finale": data.Typologie_Finale,
         "ActionCorrective_Finale": data.ActionCorrective_Finale,
         "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
@@ -196,7 +197,8 @@ def score_case(constat, fields):
     source = normalize_text(fields.get("Source", ""))
     tags = normalize_text(fields.get("Tags", ""))
     action_immediate = normalize_text(fields.get("ActionImmediate_Finale", ""))
-    cause = normalize_text(fields.get("Cause_Finale", ""))
+    analyse = normalize_text(fields.get("Analyse_Finale", ""))
+    typologie = normalize_text(fields.get("Typologie_Finale", ""))
     action_corrective = normalize_text(fields.get("ActionCorrective_Finale", ""))
     mesure = normalize_text(fields.get("MesureEfficacite_Finale", ""))
 
@@ -206,7 +208,8 @@ def score_case(constat, fields):
         source,
         tags,
         action_immediate,
-        cause,
+        analyse,
+        typologie,
         action_corrective,
         mesure
     ])
@@ -220,7 +223,9 @@ def score_case(constat, fields):
             score += 4
         if mot in source:
             score += 3
-        if mot in cause:
+        if mot in analyse:
+            score += 4
+        if mot in typologie:
             score += 3
         if mot in action_corrective:
             score += 2
@@ -282,15 +287,17 @@ def build_memory_context(constat, items, limit=5):
 CAS REEL {rang} :
 Score pertinence : {s}
 Constat : {f.get("Title", "")}
-Client : {f.get("Client", "")}
 Source : {f.get("Source", "")}
 Activite : {f.get("Activite", "")}
 Action immédiate IA : {f.get("ActionImmediate_IA", "")}
 Action immédiate finale : {f.get("ActionImmediate_Finale", "")}
-Cause IA : {f.get("Cause_IA", "")}
-Cause finale : {f.get("Cause_Finale", "")}
+Analyse IA : {f.get("Analyse_IA", "")}
+Analyse finale : {f.get("Analyse_Finale", "")}
+Typologie IA : {f.get("Typologie_IA", "")}
 Typologie finale : {f.get("Typologie_Finale", "")}
+Action corrective IA : {f.get("ActionCorrective_IA", "")}
 Action corrective finale : {f.get("ActionCorrective_Finale", "")}
+Mesure efficacité IA : {f.get("MesureEfficacite_IA", "")}
 Mesure efficacité finale : {f.get("MesureEfficacite_Finale", "")}
 Modifié par humain : {f.get("ModifieParHumain", "")}
 Qualité du cas : {f.get("QualiteCas", "")}
@@ -500,7 +507,6 @@ def memoire_update(data: MemoireUpdatePayload):
 def memoire_test():
     data_input = MemoirePayload(
         Constat="Test déchets chantier",
-        Client="Test client",
         Source="Audit chantier",
         Activite="Déchets",
         DateCas="2026-03-28",
@@ -511,8 +517,7 @@ def memoire_test():
         Analyse_IA="Tri non respecté",
         Analyse_Finale="Tri non respecté",
 
-        Cause_IA="Rigueur",
-        Cause_Finale="Rigueur",
+        Typologie_IA="Rigueur",
         Typologie_Finale="Rigueur",
 
         ActionCorrective_IA="Rappel des consignes",
