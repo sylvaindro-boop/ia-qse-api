@@ -44,6 +44,16 @@ class MemoirePayload(BaseModel):
     NomFichierSource: str = ""
 
 
+class MemoireUpdatePayload(BaseModel):
+    SharePointID: str = ""
+    ActionImmediate_Finale: str = ""
+    Analyse_Finale: str = ""
+    Cause_Finale: str = ""
+    Typologie_Finale: str = ""
+    ActionCorrective_Finale: str = ""
+    MesureEfficacite_Finale: str = ""
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "message": "API vivante"}
@@ -130,6 +140,17 @@ def build_sharepoint_fields_from_payload(data: MemoirePayload):
         "QualiteCas": normalize_qualite(data.QualiteCas),
         "Tags": data.Tags,
         "NomFichierSource": data.NomFichierSource
+    }
+
+
+def build_sharepoint_update_fields(data: MemoireUpdatePayload):
+    return {
+        "ActionImmediate_Finale": data.ActionImmediate_Finale,
+        "Cause_Finale": data.Cause_Finale,
+        "Typologie_Finale": data.Typologie_Finale,
+        "ActionCorrective_Finale": data.ActionCorrective_Finale,
+        "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
+        "ModifieParHumain": True
     }
 
 
@@ -422,6 +443,53 @@ def memoire(data: MemoirePayload):
             "http_status": sp_response.status_code,
             "detail": detail,
             "payload_sent": payload
+        }
+
+    except Exception as e:
+        return {"status": "error", "step": "python", "detail": str(e)}
+
+
+@app.post("/memoire_update")
+def memoire_update(data: MemoireUpdatePayload):
+    try:
+        access_token, token_error = get_access_token()
+        if not access_token:
+            return {"status": "error", "step": "token", "detail": token_error}
+
+        item_id = data.SharePointID.strip()
+        if item_id == "":
+            return {"status": "error", "step": "missing_sharepoint_id"}
+
+        fields = build_sharepoint_update_fields(data)
+
+        sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}/fields"
+
+        sp_response = requests.patch(
+            sp_url,
+            headers=get_headers(access_token),
+            json=fields,
+            timeout=30
+        )
+
+        try:
+            detail = sp_response.json()
+        except Exception:
+            detail = sp_response.text
+
+        if sp_response.status_code not in [200, 201]:
+            return {
+                "status": "error",
+                "step": "sharepoint_update",
+                "http_status": sp_response.status_code,
+                "detail": detail,
+                "payload_sent": fields
+            }
+
+        return {
+            "status": "ok",
+            "http_status": sp_response.status_code,
+            "detail": detail,
+            "payload_sent": fields
         }
 
     except Exception as e:
