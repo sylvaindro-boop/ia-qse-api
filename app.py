@@ -65,6 +65,13 @@ def get_access_token():
     return token_json["access_token"], None
 
 
+def get_headers(access_token):
+    return {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+
 @app.get("/analyse")
 def analyse(constat: str):
     try:
@@ -151,6 +158,31 @@ Règles :
         return {"resultat": "ERREUR PYTHON : " + str(e)}
 
 
+@app.get("/sharepoint_columns")
+def sharepoint_columns():
+    try:
+        access_token, token_error = get_access_token()
+        if not access_token:
+            return {"status": "error", "step": "token", "detail": token_error}
+
+        url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/columns"
+        response = requests.get(url, headers=get_headers(access_token), timeout=30)
+
+        try:
+            detail = response.json()
+        except Exception:
+            detail = response.text
+
+        return {
+            "status": "ok" if response.status_code == 200 else "error",
+            "http_status": response.status_code,
+            "detail": detail
+        }
+
+    except Exception as e:
+        return {"status": "error", "step": "python", "detail": str(e)}
+
+
 @app.post("/memoire")
 def memoire(data: MemoirePayload):
     try:
@@ -163,32 +195,21 @@ def memoire(data: MemoirePayload):
             "Client": data.Client,
             "Source": data.Source,
             "Activite": data.Activite,
-            "DateCas": data.DateCas,
-
-            "ActionImmediate_IA": data.ActionImmediate_IA,
             "ActionImmediate_Finale": data.ActionImmediate_Finale,
-
-            "Cause_IA": data.Cause_IA,
             "Cause_Finale": data.Cause_Finale,
-            "Typologie_Finale": data.Typologie_Finale,
-
             "ActionCorrective_Finale": data.ActionCorrective_Finale,
-            "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
-
-            "ModifieParHumain": data.ModifieParHumain,
-            "QualiteCas": data.QualiteCas,
-            "Tags": data.Tags,
-            "NomFichierSource": data.NomFichierSource
+            "MesureEfficacite_Finale": data.MesureEfficacite_Finale
         }
 
         sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-        sp_headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
         payload = {"fields": fields}
 
-        sp_response = requests.post(sp_url, headers=sp_headers, json=payload, timeout=30)
+        sp_response = requests.post(
+            sp_url,
+            headers=get_headers(access_token),
+            json=payload,
+            timeout=30
+        )
 
         try:
             detail = sp_response.json()
@@ -200,86 +221,41 @@ def memoire(data: MemoirePayload):
                 "status": "error",
                 "step": "sharepoint_create",
                 "http_status": sp_response.status_code,
-                "detail": detail
+                "detail": detail,
+                "payload_sent": payload
             }
 
         return {
             "status": "ok",
             "http_status": sp_response.status_code,
-            "detail": detail
+            "detail": detail,
+            "payload_sent": payload
         }
 
     except Exception as e:
         return {"status": "error", "step": "python", "detail": str(e)}
 
 
-@app.get("/memoire_test")
-def memoire_test():
-    data_input = {
-        "Constat": "Test déchets chantier",
-        "Client": "Test client",
-        "Source": "Audit chantier",
-        "Activite": "Déchets",
-        "DateCas": "2026-03-28",
-
-        "ActionImmediate_IA": "Nettoyage immédiat",
-        "ActionImmediate_Finale": "Nettoyage immédiat",
-
-        "Analyse_IA": "Tri non respecté",
-        "Analyse_Finale": "Tri non respecté",
-
-        "Cause_IA": "Rigueur",
-        "Cause_Finale": "Rigueur",
-        "Typologie_Finale": "Rigueur",
-
-        "ActionCorrective_IA": "Rappel des consignes",
-        "ActionCorrective_Finale": "Rappel des consignes",
-
-        "MesureEfficacite_IA": "Contrôle terrain",
-        "MesureEfficacite_Finale": "Contrôle terrain",
-
-        "ModifieParHumain": "Non",
-        "QualiteCas": "Moyen",
-        "Tags": "dechets;chantier",
-        "NomFichierSource": "Portail_Battaglino-Déconstruction_V5.xlsm"
-    }
-
+@app.get("/memoire_test_min")
+def memoire_test_min():
     try:
         access_token, token_error = get_access_token()
         if not access_token:
             return {"status": "error", "step": "token", "detail": token_error}
 
         fields = {
-            "Title": data_input.get("Constat"),
-            "Client": data_input.get("Client"),
-            "Source": data_input.get("Source"),
-            "Activite": data_input.get("Activite"),
-            "DateCas": data_input.get("DateCas"),
-
-            "ActionImmediate_IA": data_input.get("ActionImmediate_IA"),
-            "ActionImmediate_Finale": data_input.get("ActionImmediate_Finale"),
-
-            "Cause_IA": data_input.get("Cause_IA"),
-            "Cause_Finale": data_input.get("Cause_Finale"),
-            "Typologie_Finale": data_input.get("Typologie_Finale"),
-
-            "ActionCorrective_Finale": data_input.get("ActionCorrective_Finale"),
-            "MesureEfficacite_Finale": data_input.get("MesureEfficacite_Finale"),
-
-            "ModifieParHumain": data_input.get("ModifieParHumain"),
-            "QualiteCas": data_input.get("QualiteCas"),
-            "Tags": data_input.get("Tags"),
-            "NomFichierSource": data_input.get("NomFichierSource")
+            "Title": "Test minimal chantier"
         }
 
         sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
-        sp_headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
         payload = {"fields": fields}
 
-        sp_response = requests.post(sp_url, headers=sp_headers, json=payload, timeout=30)
+        sp_response = requests.post(
+            sp_url,
+            headers=get_headers(access_token),
+            json=payload,
+            timeout=30
+        )
 
         try:
             detail = sp_response.json()
@@ -289,7 +265,52 @@ def memoire_test():
         return {
             "status": "ok" if sp_response.status_code in [200, 201] else "error",
             "http_status": sp_response.status_code,
-            "detail": detail
+            "detail": detail,
+            "payload_sent": payload
+        }
+
+    except Exception as e:
+        return {"status": "error", "step": "python", "detail": str(e)}
+
+
+@app.get("/memoire_test_full")
+def memoire_test_full():
+    try:
+        access_token, token_error = get_access_token()
+        if not access_token:
+            return {"status": "error", "step": "token", "detail": token_error}
+
+        fields = {
+            "Title": "Test déchets chantier",
+            "Client": "Test client",
+            "Source": "Audit chantier",
+            "Activite": "Déchets",
+            "ActionImmediate_Finale": "Nettoyage immédiat",
+            "Cause_Finale": "Rigueur",
+            "ActionCorrective_Finale": "Rappel des consignes",
+            "MesureEfficacite_Finale": "Contrôle terrain"
+        }
+
+        sp_url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items"
+        payload = {"fields": fields}
+
+        sp_response = requests.post(
+            sp_url,
+            headers=get_headers(access_token),
+            json=payload,
+            timeout=30
+        )
+
+        try:
+            detail = sp_response.json()
+        except Exception:
+            detail = sp_response.text
+
+        return {
+            "status": "ok" if sp_response.status_code in [200, 201] else "error",
+            "http_status": sp_response.status_code,
+            "detail": detail,
+            "payload_sent": payload
         }
 
     except Exception as e:
