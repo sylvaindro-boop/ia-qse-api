@@ -168,17 +168,11 @@ def memoire(data: MemoirePayload):
             "ActionImmediate_IA": data.ActionImmediate_IA,
             "ActionImmediate_Finale": data.ActionImmediate_Finale,
 
-            "Analyse_IA": data.Analyse_IA,
-            "Analyse_Finale": data.Analyse_Finale,
-
             "Cause_IA": data.Cause_IA,
             "Cause_Finale": data.Cause_Finale,
             "Typologie_Finale": data.Typologie_Finale,
 
-            "ActionCorrective_IA": data.ActionCorrective_IA,
             "ActionCorrective_Finale": data.ActionCorrective_Finale,
-
-            "MesureEfficacite_IA": data.MesureEfficacite_IA,
             "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
 
             "ModifieParHumain": data.ModifieParHumain,
@@ -265,17 +259,11 @@ def memoire_test():
             "ActionImmediate_IA": data_input.get("ActionImmediate_IA"),
             "ActionImmediate_Finale": data_input.get("ActionImmediate_Finale"),
 
-            "Analyse_IA": data_input.get("Analyse_IA"),
-            "Analyse_Finale": data_input.get("Analyse_Finale"),
-
             "Cause_IA": data_input.get("Cause_IA"),
             "Cause_Finale": data_input.get("Cause_Finale"),
             "Typologie_Finale": data_input.get("Typologie_Finale"),
 
-            "ActionCorrective_IA": data_input.get("ActionCorrective_IA"),
             "ActionCorrective_Finale": data_input.get("ActionCorrective_Finale"),
-
-            "MesureEfficacite_IA": data_input.get("MesureEfficacite_IA"),
             "MesureEfficacite_Finale": data_input.get("MesureEfficacite_Finale"),
 
             "ModifieParHumain": data_input.get("ModifieParHumain"),
@@ -293,10 +281,15 @@ def memoire_test():
 
         sp_response = requests.post(sp_url, headers=sp_headers, json=payload, timeout=30)
 
+        try:
+            detail = sp_response.json()
+        except Exception:
+            detail = sp_response.text
+
         return {
-            "status": "ok",
+            "status": "ok" if sp_response.status_code in [200, 201] else "error",
             "http_status": sp_response.status_code,
-            "detail": sp_response.json()
+            "detail": detail
         }
 
     except Exception as e:
