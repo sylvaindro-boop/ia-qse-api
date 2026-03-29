@@ -350,7 +350,7 @@ def analyse(constat: str, source: str = "", activite: str = "", typologies: str 
         prompt = f"""
 Tu es un expert QSE terrain.
 
-Tu dois répondre EXACTEMENT avec ces 6 lignes, sans texte avant ni après :
+Tu dois répondre uniquement avec ces 6 lignes, sans texte avant ni après :
 
 CONSTAT=
 ACTION_IMMEDIATE=
@@ -359,33 +359,37 @@ CAUSE_RACINE=
 ACTION_CORRECTIVE=
 MESURE_EFFICACITE=
 
-Tu dois t'inspirer des cas réels les plus pertinents issus de la mémoire SharePoint.
-Privilégie les cas avec :
-- score élevé
-- Qualité du cas = Bon ou Reference
-- Modifié par humain = True
+Objectif :
+proposer un plan d'action QSE réaliste, utile et directement exploitable sur le terrain, en t'appuyant sur le nouveau cas et sur les cas réels les plus pertinents issus de la mémoire SharePoint.
 
-TYPOLOGIES AUTORISEES :
+Utilisation de la mémoire :
+- inspire-toi en priorité des cas les plus pertinents
+- privilégie les cas avec un score élevé
+- privilégie les cas de qualité Bon ou Reference
+- privilégie les cas modifiés par humain quand ils apportent une meilleure formulation métier
+- réutilise la logique métier des bons cas sans copier mécaniquement un texte inadapté
+
+Typologies disponibles :
 {typologies_list}
 
-REGLES ABSOLUES POUR CAUSE_RACINE :
-- CAUSE_RACINE doit être STRICTEMENT ET EXACTEMENT UNE ligne complète de la liste TYPOLOGIES AUTORISEES
-- Il est interdit de répondre par un mot générique comme "Organisation", "Management", "Matériel" si ce n'est pas exactement une ligne complète de la liste
-- Il est interdit de tronquer, résumer, simplifier ou reformuler un libellé
-- Tu dois recopier le libellé complet exact, caractère par caractère
-- CAUSE_RACINE doit contenir UNE SEULE valeur
-- Si plusieurs lignes semblent proches, choisis la plus pertinente mais recopie son libellé complet exact
-- Si aucune valeur n'est parfaite, choisis la plus proche DANS la liste, mais toujours avec le libellé complet exact
+Règles pour la typologie cause racine :
+- choisis une seule valeur pour CAUSE_RACINE
+- choisis-la dans la liste des typologies disponibles
+- sélectionne la typologie la plus pertinente au regard du constat
+- évite les libellés trop génériques si une typologie plus précise de la liste correspond mieux
+- si plusieurs typologies sont proches, prends la plus précise et la plus utile métier
 
-EXEMPLES DE MAUVAISE REPONSE :
-- "Organisation"
-- "Management"
-- "Non respect des consignes"
-
-EXEMPLES DE BONNE REPONSE :
-- "Organisation du chantier"
-- "Organisation sécurité insuffisamment formalisée"
-- "Non-respect des distances de sécurité"
+Règles de rédaction :
+- CONSTAT : reformule proprement si utile, sans changer le sens
+- ACTION_IMMEDIATE : action courte, immédiate, concrète terrain
+- ANALYSE : explique la cause ou le mécanisme de l'écart de façon claire et utile
+- ACTION_CORRECTIVE : action réaliste, concrète, applicable par l'encadrement ou l'équipe
+- MESURE_EFFICACITE : contrôle observable, vérifiable sur le terrain
+- reste concis
+- reste réaliste chantier
+- pas de blabla
+- pas de formulation vague
+- privilégie une logique métier crédible plutôt qu'un texte générique
 
 Mémoire SharePoint :
 {memoire}
@@ -394,13 +398,6 @@ Nouveau cas :
 Source : {source}
 Activité : {activite}
 Constat : {constat}
-
-Règles :
-- Cause racine courte
-- Actions concrètes terrain
-- Pas de blabla
-- Rester réaliste chantier
-- Si un bon cas proche existe, réutilise sa logique
 """
 
         ai_url = "https://api.openai.com/v1/chat/completions"
