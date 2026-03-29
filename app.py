@@ -311,7 +311,7 @@ Tags : {f.get("Tags", "")}
 
 
 @app.get("/analyse")
-def analyse(constat: str):
+def analyse(constat: str, source: str = "", activite: str = "", typologies: str = ""):
     try:
         access_token, token_error = get_access_token()
         if not access_token:
@@ -328,6 +328,19 @@ def analyse(constat: str):
 
         items = sp_json.get("value", [])
         memoire = build_memory_context(constat, items, limit=5)
+
+        typologies_list = ""
+        if typologies:
+            lignes = typologies.split("||")
+            propres = []
+            for l in lignes:
+                l = l.strip()
+                if l != "":
+                    l = l.lstrip("-").strip()
+                    if l != "":
+                        propres.append(l)
+            if propres:
+                typologies_list = "\n".join([f"- {x}" for x in propres])
 
         prompt = f"""
 Tu es un expert QSE terrain.
@@ -347,11 +360,22 @@ Privilégie les cas avec :
 - Qualité du cas = Bon ou Reference
 - Modifié par humain = True
 
+TYPOLOGIES AUTORISEES :
+{typologies_list}
+
+REGLES ABSOLUES POUR CAUSE_RACINE :
+- CAUSE_RACINE doit être STRICTEMENT UNE valeur de la liste TYPOLOGIES AUTORISEES
+- Interdiction totale d'inventer, reformuler, résumer ou compléter
+- CAUSE_RACINE doit contenir UNE SEULE valeur
+- Si aucune valeur n'est parfaite, choisis la plus proche DANS la liste
+
 Mémoire SharePoint :
 {memoire}
 
-Nouveau constat :
-{constat}
+Nouveau cas :
+Source : {source}
+Activité : {activite}
+Constat : {constat}
 
 Règles :
 - Cause racine courte
@@ -371,7 +395,7 @@ Règles :
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.2
+            "temperature": 0.1
         }
 
         ai_response = requests.post(ai_url, headers=ai_headers, json=ai_data, timeout=60)
