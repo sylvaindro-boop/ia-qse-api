@@ -4,6 +4,7 @@ import requests
 import os
 import re
 import unicodedata
+from urllib.parse import unquote
 
 app = FastAPI()
 
@@ -330,20 +331,21 @@ def analyse(constat: str, source: str = "", activite: str = "", typologies: str 
         memoire = build_memory_context(constat, items, limit=5)
 
         typologies_list = ""
-        from urllib.parse import unquote
+        typologies_brutes = []
 
-if typologies:
-    typologies = unquote(typologies)
+        if typologies:
+            typologies = unquote(typologies)
             lignes = typologies.split("||")
-            propres = []
+
             for l in lignes:
                 l = l.strip()
                 if l != "":
                     l = l.lstrip("-").strip()
                     if l != "":
-                        propres.append(l)
-            if propres:
-                typologies_list = "\n".join([f"- {x}" for x in propres])
+                        typologies_brutes.append(l)
+
+        if typologies_brutes:
+            typologies_list = "\n".join([f"- {x}" for x in typologies_brutes])
 
         prompt = f"""
 Tu es un expert QSE terrain.
@@ -367,10 +369,23 @@ TYPOLOGIES AUTORISEES :
 {typologies_list}
 
 REGLES ABSOLUES POUR CAUSE_RACINE :
-- CAUSE_RACINE doit être STRICTEMENT UNE valeur de la liste TYPOLOGIES AUTORISEES
-- Interdiction totale d'inventer, reformuler, résumer ou compléter
+- CAUSE_RACINE doit être STRICTEMENT ET EXACTEMENT UNE ligne complète de la liste TYPOLOGIES AUTORISEES
+- Il est interdit de répondre par un mot générique comme "Organisation", "Management", "Matériel" si ce n'est pas exactement une ligne complète de la liste
+- Il est interdit de tronquer, résumer, simplifier ou reformuler un libellé
+- Tu dois recopier le libellé complet exact, caractère par caractère
 - CAUSE_RACINE doit contenir UNE SEULE valeur
-- Si aucune valeur n'est parfaite, choisis la plus proche DANS la liste
+- Si plusieurs lignes semblent proches, choisis la plus pertinente mais recopie son libellé complet exact
+- Si aucune valeur n'est parfaite, choisis la plus proche DANS la liste, mais toujours avec le libellé complet exact
+
+EXEMPLES DE MAUVAISE REPONSE :
+- "Organisation"
+- "Management"
+- "Non respect des consignes"
+
+EXEMPLES DE BONNE REPONSE :
+- "Organisation du chantier"
+- "Organisation sécurité insuffisamment formalisée"
+- "Non-respect des distances de sécurité"
 
 Mémoire SharePoint :
 {memoire}
@@ -398,7 +413,7 @@ Règles :
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.1
+            "temperature": 0.0
         }
 
         ai_response = requests.post(ai_url, headers=ai_headers, json=ai_data, timeout=60)
