@@ -330,7 +330,10 @@ def analyse(constat: str, source: str = "", activite: str = "", typologies: str 
         memoire = build_memory_context(constat, items, limit=5)
 
         typologies_list = ""
-        if typologies:
+        from urllib.parse import unquote
+
+if typologies:
+    typologies = unquote(typologies)
             lignes = typologies.split("||")
             propres = []
             for l in lignes:
