@@ -197,65 +197,64 @@ def score_case(constat, fields):
     activite = normalize_text(fields.get("Activite", ""))
     source = normalize_text(fields.get("Source", ""))
     tags = normalize_text(fields.get("Tags", ""))
-    action_immediate = normalize_text(fields.get("ActionImmediate_Finale", ""))
-    analyse = normalize_text(fields.get("Analyse_Finale", ""))
-    typologie = normalize_text(fields.get("Typologie_Finale", ""))
-    action_corrective = normalize_text(fields.get("ActionCorrective_Finale", ""))
-    mesure = normalize_text(fields.get("MesureEfficacite_Finale", ""))
+
+    action_immediate_finale = normalize_text(fields.get("ActionImmediate_Finale", ""))
+    analyse_finale = normalize_text(fields.get("Analyse_Finale", ""))
+    typologie_finale = normalize_text(fields.get("Typologie_Finale", ""))
+    action_corrective_finale = normalize_text(fields.get("ActionCorrective_Finale", ""))
+    mesure_finale = normalize_text(fields.get("MesureEfficacite_Finale", ""))
 
     bloc = " ".join([
         title,
         activite,
         source,
         tags,
-        action_immediate,
-        analyse,
-        typologie,
-        action_corrective,
-        mesure
+        action_immediate_finale,
+        analyse_finale,
+        typologie_finale,
+        action_corrective_finale,
+        mesure_finale
     ])
 
-    # 🔥 PRIORITÉ MÉTIER
-    # Source identique = très fort
-    if source != "" and source in constat_txt:
-        score += 20
+    # 1) priorité forte à la source
+    if source:
+        for mot in extract_keywords(source):
+            if mot and mot in constat_txt:
+                score += 20
 
-    # Activité identique = fort
-    if activite != "" and activite in constat_txt:
-        score += 15
+    # 2) activité = bonus léger seulement
+    if activite:
+        for mot in extract_keywords(activite):
+            if mot and mot in constat_txt:
+                score += 4
 
-    # 🔎 Similarité constat (classique)
+    # 3) similarité du constat avec les champs finaux
     for mot in constat_keywords:
         if mot in title:
-            score += 8
-        if mot in activite:
+            score += 10
+        if mot in analyse_finale:
             score += 6
-        if mot in source:
-            score += 5
-        if mot in tags:
+        if mot in typologie_finale:
             score += 4
-        if mot in analyse:
+        if mot in action_corrective_finale:
             score += 4
-        if mot in typologie:
+        if mot in action_immediate_finale:
             score += 3
-        if mot in action_corrective:
+        if mot in mesure_finale:
             score += 2
-        if mot in action_immediate:
+        if mot in tags:
             score += 2
-        if mot in mesure:
-            score += 1
 
-    # Phrase complète retrouvée
+    # 4) bonus si le constat complet est retrouvé
     if constat_txt and constat_txt in bloc:
-        score += 10
+        score += 12
 
-    # 🔥 Cas modifié par humain = bonus important
+    # 5) bonus si modifié par humain
     modifie = fields.get("ModifieParHumain", False)
     if modifie is True:
-        score += 10
+        score += 8
 
     return score
-
 
 def build_memory_context(constat, items, limit=5):
     scored = []
