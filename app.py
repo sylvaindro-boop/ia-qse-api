@@ -215,15 +215,25 @@ def score_case(constat, fields):
         mesure
     ])
 
+    # 🔥 PRIORITÉ MÉTIER
+    # Source identique = très fort
+    if source != "" and source in constat_txt:
+        score += 20
+
+    # Activité identique = fort
+    if activite != "" and activite in constat_txt:
+        score += 15
+
+    # 🔎 Similarité constat (classique)
     for mot in constat_keywords:
         if mot in title:
             score += 8
         if mot in activite:
+            score += 6
+        if mot in source:
             score += 5
         if mot in tags:
             score += 4
-        if mot in source:
-            score += 3
         if mot in analyse:
             score += 4
         if mot in typologie:
@@ -235,21 +245,14 @@ def score_case(constat, fields):
         if mot in mesure:
             score += 1
 
+    # Phrase complète retrouvée
     if constat_txt and constat_txt in bloc:
         score += 10
 
-    qualite = fields.get("QualiteCas", "")
+    # 🔥 Cas modifié par humain = bonus important
     modifie = fields.get("ModifieParHumain", False)
-
-    if str(qualite).strip().lower() == "reference":
-        score += 8
-    elif str(qualite).strip().lower() == "bon":
-        score += 4
-    elif str(qualite).strip().lower() == "faible":
-        score -= 3
-
     if modifie is True:
-        score += 5
+        score += 10
 
     return score
 
