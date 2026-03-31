@@ -314,8 +314,25 @@ Tags : {f.get("Tags", "")}
 
 
 @app.get("/analyse")
-def analyse(constat: str, source: str = "", activite: str = "", typologies: str = ""):
+def analyse(
+    constat: str,
+    source: str = "",
+    activite: str = "",
+    typologies: str = "",
+    action_immediate: str = "",
+    analyse_txt: str = "",
+    cause_racine: str = "",
+    action_corrective: str = "",
+    mesure_efficacite: str = ""
+):
     try:
+        # 🔓 Décodage URL
+        action_immediate = unquote(action_immediate)
+        analyse_txt = unquote(analyse_txt)
+        cause_racine = unquote(cause_racine)
+        action_corrective = unquote(action_corrective)
+        mesure_efficacite = unquote(mesure_efficacite)
+
         access_token, token_error = get_access_token()
         if not access_token:
             return {"resultat": "ERREUR AZURE TOKEN : " + str(token_error)}
@@ -350,11 +367,11 @@ def analyse(constat: str, source: str = "", activite: str = "", typologies: str 
         if typologies_brutes:
             typologies_list = "\n".join([f"- {x}" for x in typologies_brutes])
 
-        # 🔥 PROMPT OPTIMISÉ
+        # 🔥 PROMPT AMÉLIORÉ
         prompt = f"""
 Tu es un responsable QSE chantier expérimenté.
 
-Tu dois produire un plan d'action concret, utile et directement applicable terrain.
+Tu dois améliorer un plan d'action existant sans détruire le travail déjà fait.
 
 Réponds STRICTEMENT avec ces 6 lignes :
 CONSTAT=
@@ -370,6 +387,15 @@ NOUVEAU CAS
 Source : {source}
 Activité : {activite}
 Constat : {constat}
+
+-----------------------
+DONNEES UTILISATEUR DEJA SAISIES
+-----------------------
+Action immédiate : {action_immediate}
+Analyse : {analyse_txt}
+Cause racine : {cause_racine}
+Action corrective : {action_corrective}
+Mesure efficacité : {mesure_efficacite}
 
 -----------------------
 TYPOLOGIES (LISTE FERMEE)
@@ -389,9 +415,8 @@ METHODE
 -----------------------
 1. Comprendre le problème réel
 2. Identifier les cas similaires
-3. S’inspirer des meilleurs cas (score élevé + modifié humain)
-4. Reproduire la logique métier (cause → action → contrôle)
-5. Adapter sans copier
+3. S’inspirer des meilleurs cas
+4. Adapter au contexte utilisateur
 
 -----------------------
 REGLES
@@ -400,8 +425,16 @@ REGLES
 - pas de blabla
 - pas de phrases vagues
 - actionnable immédiatement
-- privilégier les champs FINAUX
-- privilégier les cas modifiés par humain
+
+- Si un champ est déjà rempli :
+  → l’améliorer sans le remplacer inutilement
+
+- Si un champ est vide :
+  → le compléter
+
+- Ne pas supprimer une information pertinente fournie par l’utilisateur
+
+- Respecter la logique existante du plan
 
 Réponds uniquement avec les 6 lignes.
 """
@@ -411,6 +444,7 @@ Réponds uniquement avec les 6 lignes.
             "Authorization": f"Bearer {OPENAI_API_KEY}",
             "Content-Type": "application/json"
         }
+
         ai_data = {
             "model": "gpt-4.1-mini",
             "messages": [
@@ -426,6 +460,7 @@ Réponds uniquement avec les 6 lignes.
             return {"resultat": "ERREUR OPENAI : " + str(ai_json)}
 
         texte = ai_json["choices"][0]["message"]["content"]
+
         return {"resultat": texte}
 
     except Exception as e:
