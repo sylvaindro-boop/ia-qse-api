@@ -326,6 +326,14 @@ def analyse(
     mesure_efficacite: str = ""
 ):
     try:
+        print("DEBUG INPUT ----")
+print("constat:", constat)
+print("action_immediate:", action_immediate)
+print("analyse:", analyse_txt)
+print("cause_racine:", cause_racine)
+print("action_corrective:", action_corrective)
+print("mesure_efficacite:", mesure_efficacite)
+print("-----------------")
         # 🔓 Décodage URL
         action_immediate = unquote(action_immediate)
         analyse_txt = unquote(analyse_txt)
@@ -369,6 +377,9 @@ def analyse(
 
         # 🔥 PROMPT AMÉLIORÉ
         prompt = f"""
+        print("DEBUG PROMPT ----")
+print(prompt)
+print("-----------------")
 Tu es un responsable QSE chantier expérimenté.
 
 Tu dois améliorer un plan d'action existant sans détruire le travail déjà fait.
