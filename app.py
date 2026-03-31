@@ -644,3 +644,15 @@ def memoire_test():
 
     except Exception as e:
         return {"status": "error", "step": "python", "detail": str(e)}
+
+@app.get("/analyse_test")
+def analyse_test(
+    constat: str = "",
+    action_immediate: str = "",
+    analyse_txt: str = ""
+):
+    return {
+        "constat": constat,
+        "action_immediate": action_immediate,
+        "analyse": analyse_txt
+    }
