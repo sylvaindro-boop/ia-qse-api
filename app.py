@@ -320,7 +320,7 @@ def analyse(
     activite: str = "",
     typologies: str = "",
     action_immediate: str = "",
-    analyse: str = "",
+    analyse_txt: str = "",
     cause_racine: str = "",
     action_corrective: str = "",
     mesure_efficacite: str = ""
