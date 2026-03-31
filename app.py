@@ -320,7 +320,7 @@ def analyse(
     activite: str = "",
     typologies: str = "",
     action_immediate: str = "",
-    analyse_txt: str = "",
+    analyse: str = "",
     cause_racine: str = "",
     action_corrective: str = "",
     mesure_efficacite: str = ""
@@ -328,7 +328,7 @@ def analyse(
     try:
         # 🔓 Décodage URL
         action_immediate = unquote(action_immediate)
-        analyse_txt = unquote(analyse_txt)
+        analyse = unquote(analyse)
         cause_racine = unquote(cause_racine)
         action_corrective = unquote(action_corrective)
         mesure_efficacite = unquote(mesure_efficacite)
@@ -393,7 +393,7 @@ Constat : {constat}
 DONNEES UTILISATEUR DEJA SAISIES
 -----------------------
 Action immédiate : {action_immediate}
-Analyse : {analyse_txt}
+Analyse : {analyse}
 Cause racine : {cause_racine}
 Action corrective : {action_corrective}
 Mesure efficacité : {mesure_efficacite}
