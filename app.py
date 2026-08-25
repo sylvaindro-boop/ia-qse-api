@@ -490,3 +490,13 @@ def memoire_update(data: MemoireUpdatePayload, request: Request):
     url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}/fields"
     graph_json("PATCH", url, access_token, json=fields)
     return {"status": "ok", "id": item_id}
+
+
+try:
+    import json
+    from memory_snapshot import snapshot_memory
+    print("MEMORY_SNAPSHOT_BEGIN")
+    print(json.dumps(snapshot_memory(), ensure_ascii=False))
+    print("MEMORY_SNAPSHOT_END")
+except Exception as snapshot_exc:
+    print("MEMORY_SNAPSHOT_ERROR", repr(snapshot_exc))
