@@ -26,11 +26,6 @@ def _slug(value):
     return text[:120]
 
 
-def _item_constat(item):
-    fields = item.get("fields", {})
-    return fields.get("ConstatComplet") or fields.get("Title", "")
-
-
 def _excel_fields(action, source_name):
     constat = str(action.get("Constat", "") or "")
     tags = [
@@ -50,11 +45,13 @@ def _excel_fields(action, source_name):
     tags = ";".join(x for x in (_slug(v) for v in tags) if x)
     return {
         "Title": constat[:255],
-        "ConstatComplet": constat,
+        # Technical full-constat storage: this is a multiline field and Excel has no
+        # separate IA value for Action immédiate. ActionImmediate_Finale remains the
+        # real Excel action immediate.
+        "ActionImmediate_IA": constat,
         "Source": action.get("Source", ""),
         "Activite": action.get("Activite", ""),
         "DateCas": _date_key(action.get("DateCas", "")),
-        "ActionImmediate_IA": action.get("ActionImmediate", ""),
         "ActionImmediate_Finale": action.get("ActionImmediate", ""),
         "Analyse_IA": action.get("Analyse", ""),
         "Analyse_Finale": action.get("Analyse", ""),
@@ -143,31 +140,6 @@ def _load_items(token):
     return result
 
 
-def _ensure_full_constat_column(token):
-    site = os.environ["SITE_ID"]
-    list_id = os.environ["LIST_ID"]
-    columns_url = f"https://graph.microsoft.com/v1.0/sites/{site}/lists/{list_id}/columns"
-    columns = _request("GET", columns_url, token).get("value", [])
-    for col in columns:
-        if col.get("name") == "ConstatComplet" or col.get("displayName") == "ConstatComplet":
-            return col.get("name") or "ConstatComplet"
-    definition = {
-        "name": "ConstatComplet",
-        "displayName": "ConstatComplet",
-        "description": "Constat intégral issu du plan d'action Excel maître.",
-        "text": {
-            "allowMultipleLines": True,
-            "appendChangesToExistingText": False,
-            "linesForEditing": 10,
-            "textType": "plain",
-        },
-    }
-    created = _request("POST", columns_url, token, json=definition)
-    internal_name = created.get("name") or "ConstatComplet"
-    print("RECON_SCHEMA " + json.dumps({"created": True, "column": internal_name}, ensure_ascii=False), flush=True)
-    return internal_name
-
-
 def _composite_excel(action):
     return (
         _norm(action.get("Constat")),
@@ -180,7 +152,7 @@ def _composite_excel(action):
 def _composite_item(item):
     f = item.get("fields", {})
     return (
-        _norm(_item_constat(item)),
+        _norm(f.get("Title", "")),
         _norm(f.get("Source")),
         _norm(f.get("Activite")),
         _date_key(f.get("DateCas")),
@@ -205,10 +177,6 @@ def reconcile_once():
         return {"status": "skipped"}
 
     token = _token()
-    full_constat_column = _ensure_full_constat_column(token)
-    if full_constat_column != "ConstatComplet":
-        raise RuntimeError(f"unexpected full constat internal column name: {full_constat_column}")
-
     payload = _load_payload(token)
     actions = payload["actions"]
     if len(actions) != 163:
@@ -221,7 +189,7 @@ def reconcile_once():
     for item in items:
         item_id = str(item.get("id", ""))
         by_composite[_composite_item(item)].append(item_id)
-        by_title[_norm(_item_constat(item))].append(item_id)
+        by_title[_norm(item.get("fields", {}).get("Title", ""))].append(item_id)
 
     assigned = {}
     used_ids = set()
@@ -232,9 +200,9 @@ def reconcile_once():
         old_id = str(action.get("SharePointID", "")).strip()
         item = by_id.get(old_id)
         if item:
-            item_constat = _norm(_item_constat(item))
+            item_title = _norm(item.get("fields", {}).get("Title"))
             excel_constat = _norm(action.get("Constat"))
-            if item_constat == excel_constat or _legacy_prefix_match(action, item):
+            if item_title == excel_constat or _legacy_prefix_match(action, item):
                 assigned[row] = old_id
                 used_ids.add(old_id)
 
@@ -249,7 +217,7 @@ def reconcile_once():
             assigned[row] = chosen
             used_ids.add(chosen)
 
-    # 3. Exact normalized constat match.
+    # 3. Exact normalized Title match.
     for action in actions:
         row = int(action["row"])
         if row in assigned:
