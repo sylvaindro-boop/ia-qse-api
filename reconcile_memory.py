@@ -26,7 +26,13 @@ def _slug(value):
     return text[:120]
 
 
+def _item_constat(item):
+    fields = item.get("fields", {})
+    return fields.get("ConstatComplet") or fields.get("Title", "")
+
+
 def _excel_fields(action, source_name):
+    constat = str(action.get("Constat", "") or "")
     tags = [
         action.get("Source", ""),
         action.get("Activite", ""),
@@ -43,7 +49,8 @@ def _excel_fields(action, source_name):
         tags.append("avec-commentaire")
     tags = ";".join(x for x in (_slug(v) for v in tags) if x)
     return {
-        "Title": action.get("Constat", ""),
+        "Title": constat[:255],
+        "ConstatComplet": constat,
         "Source": action.get("Source", ""),
         "Activite": action.get("Activite", ""),
         "DateCas": _date_key(action.get("DateCas", "")),
@@ -89,7 +96,7 @@ def _request(method, url, token, **kwargs):
         **kwargs,
     )
     if response.status_code < 200 or response.status_code >= 300:
-        raise RuntimeError(f"Graph {method} {response.status_code}: {response.text[:1000]}")
+        raise RuntimeError(f"Graph {method} {response.status_code}: {response.text[:1500]}")
     if not response.content:
         return {}
     try:
@@ -110,6 +117,20 @@ def _load_payload(token):
     return payload
 
 
+def _save_payload(token, payload):
+    drive = os.environ["RECONCILE_PAYLOAD_DRIVE_ID"]
+    item = os.environ["RECONCILE_PAYLOAD_ITEM_ID"]
+    url = f"https://graph.microsoft.com/v1.0/drives/{drive}/items/{item}/content"
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    response = requests.put(
+        url,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"},
+        data=body,
+        timeout=45,
+    )
+    response.raise_for_status()
+
+
 def _load_items(token):
     site = os.environ["SITE_ID"]
     list_id = os.environ["LIST_ID"]
@@ -120,6 +141,31 @@ def _load_items(token):
         result.extend(data.get("value", []))
         url = data.get("@odata.nextLink")
     return result
+
+
+def _ensure_full_constat_column(token):
+    site = os.environ["SITE_ID"]
+    list_id = os.environ["LIST_ID"]
+    columns_url = f"https://graph.microsoft.com/v1.0/sites/{site}/lists/{list_id}/columns"
+    columns = _request("GET", columns_url, token).get("value", [])
+    for col in columns:
+        if col.get("name") == "ConstatComplet" or col.get("displayName") == "ConstatComplet":
+            return col.get("name") or "ConstatComplet"
+    definition = {
+        "name": "ConstatComplet",
+        "displayName": "ConstatComplet",
+        "description": "Constat intégral issu du plan d'action Excel maître.",
+        "text": {
+            "allowMultipleLines": True,
+            "appendChangesToExistingText": False,
+            "linesForEditing": 10,
+            "textType": "plain",
+        },
+    }
+    created = _request("POST", columns_url, token, json=definition)
+    internal_name = created.get("name") or "ConstatComplet"
+    print("RECON_SCHEMA " + json.dumps({"created": True, "column": internal_name}, ensure_ascii=False), flush=True)
+    return internal_name
 
 
 def _composite_excel(action):
@@ -134,11 +180,24 @@ def _composite_excel(action):
 def _composite_item(item):
     f = item.get("fields", {})
     return (
-        _norm(f.get("Title")),
+        _norm(_item_constat(item)),
         _norm(f.get("Source")),
         _norm(f.get("Activite")),
         _date_key(f.get("DateCas")),
     )
+
+
+def _legacy_prefix_match(action, item):
+    f = item.get("fields", {})
+    excel_constat = _norm(action.get("Constat"))
+    item_title = _norm(f.get("Title"))
+    if len(item_title) < 180 or not excel_constat.startswith(item_title):
+        return False
+    if _norm(f.get("Source")) != _norm(action.get("Source")):
+        return False
+    if _norm(f.get("Activite")) != _norm(action.get("Activite")):
+        return False
+    return _date_key(f.get("DateCas")) == _date_key(action.get("DateCas"))
 
 
 def reconcile_once():
@@ -146,6 +205,10 @@ def reconcile_once():
         return {"status": "skipped"}
 
     token = _token()
+    full_constat_column = _ensure_full_constat_column(token)
+    if full_constat_column != "ConstatComplet":
+        raise RuntimeError(f"unexpected full constat internal column name: {full_constat_column}")
+
     payload = _load_payload(token)
     actions = payload["actions"]
     if len(actions) != 163:
@@ -158,7 +221,7 @@ def reconcile_once():
     for item in items:
         item_id = str(item.get("id", ""))
         by_composite[_composite_item(item)].append(item_id)
-        by_title[_norm(item.get("fields", {}).get("Title", ""))].append(item_id)
+        by_title[_norm(_item_constat(item))].append(item_id)
 
     assigned = {}
     used_ids = set()
@@ -168,11 +231,14 @@ def reconcile_once():
         row = int(action["row"])
         old_id = str(action.get("SharePointID", "")).strip()
         item = by_id.get(old_id)
-        if item and _norm(item.get("fields", {}).get("Title")) == _norm(action.get("Constat")):
-            assigned[row] = old_id
-            used_ids.add(old_id)
+        if item:
+            item_constat = _norm(_item_constat(item))
+            excel_constat = _norm(action.get("Constat"))
+            if item_constat == excel_constat or _legacy_prefix_match(action, item):
+                assigned[row] = old_id
+                used_ids.add(old_id)
 
-    # 2. Exact composite match: title + source + activity + date.
+    # 2. Exact composite match: constat + source + activity + date.
     for action in actions:
         row = int(action["row"])
         if row in assigned:
@@ -183,17 +249,13 @@ def reconcile_once():
             assigned[row] = chosen
             used_ids.add(chosen)
 
-    # 3. Unique exact normalized title match for legacy entries where dates/fields drifted.
+    # 3. Exact normalized constat match.
     for action in actions:
         row = int(action["row"])
         if row in assigned:
             continue
         candidates = [x for x in by_title.get(_norm(action.get("Constat")), []) if x not in used_ids]
-        if len(candidates) == 1:
-            assigned[row] = candidates[0]
-            used_ids.add(candidates[0])
-        elif len(candidates) > 1:
-            # Prefer same source/activity, then lowest item id.
+        if candidates:
             scored = []
             for item_id in candidates:
                 f = by_id[item_id].get("fields", {})
@@ -210,6 +272,20 @@ def reconcile_once():
             assigned[row] = chosen
             used_ids.add(chosen)
 
+    # 4. Legacy SharePoint Title may have been truncated at 255 characters.
+    for action in actions:
+        row = int(action["row"])
+        if row in assigned:
+            continue
+        candidates = []
+        for item_id, item in by_id.items():
+            if item_id not in used_ids and _legacy_prefix_match(action, item):
+                candidates.append(item_id)
+        if candidates:
+            chosen = sorted(candidates, key=lambda x: int(x))[0]
+            assigned[row] = chosen
+            used_ids.add(chosen)
+
     site = os.environ["SITE_ID"]
     list_id = os.environ["LIST_ID"]
     base = f"https://graph.microsoft.com/v1.0/sites/{site}/lists/{list_id}/items"
@@ -217,7 +293,6 @@ def reconcile_once():
 
     created = 0
     updated = 0
-    # First update matched items and create missing Excel actions.
     for action in actions:
         row = int(action["row"])
         fields = _excel_fields(action, source_name)
@@ -233,9 +308,9 @@ def reconcile_once():
             assigned[row] = item_id
             used_ids.add(item_id)
             created += 1
-        print("RECON_MAP " + json.dumps({"row": row, "id": item_id}, ensure_ascii=False))
+        print("RECON_MAP " + json.dumps({"row": row, "id": item_id}, ensure_ascii=False), flush=True)
 
-    # Excel is the master: every old list item not assigned to an Excel row is removed.
+    # Excel is the master: every pre-existing list item not assigned to an Excel row is removed.
     keep_ids = set(assigned.values())
     deleted = 0
     deleted_ids = []
@@ -254,6 +329,8 @@ def reconcile_once():
     if missing_ids:
         raise RuntimeError(f"assigned IDs missing after reconciliation: {missing_ids[:10]}")
 
+    for action in actions:
+        action["SharePointID"] = assigned[int(action["row"])]
     result = {
         "status": "ok",
         "excel_count": len(actions),
@@ -264,7 +341,9 @@ def reconcile_once():
         "deleted": deleted,
         "deleted_ids": deleted_ids,
     }
-    print("RECON_SUMMARY " + json.dumps(result, ensure_ascii=False))
+    payload["reconciliation"] = result
+    _save_payload(token, payload)
+    print("RECON_SUMMARY " + json.dumps(result, ensure_ascii=False), flush=True)
     return result
 
 
