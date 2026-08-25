@@ -182,45 +182,56 @@ def normalize_qualite(value):
     return "Bon"
 
 
+def short_text(value, max_length=255):
+    return str(value or "")[:max_length]
+
+
+def full_constat(fields):
+    return str(fields.get("ActionImmediate_IA") or fields.get("Title") or "")
+
+
 def build_sharepoint_fields_from_payload(data: MemoirePayload):
+    constat = str(data.Constat or "")
     return {
-        "Title": data.Constat,
-        "Source": data.Source,
-        "Activite": data.Activite,
+        "Title": constat[:255],
+        "Source": short_text(data.Source),
+        "Activite": short_text(data.Activite),
         "DateCas": data.DateCas,
-        "ActionImmediate_IA": data.ActionImmediate_IA,
+        "ActionImmediate_IA": constat,
         "ActionImmediate_Finale": data.ActionImmediate_Finale,
         "Analyse_IA": data.Analyse_IA,
         "Analyse_Finale": data.Analyse_Finale,
-        "Typologie_IA": data.Typologie_IA,
-        "Typologie_Finale": data.Typologie_Finale,
+        "Typologie_IA": short_text(data.Typologie_IA),
+        "Typologie_Finale": short_text(data.Typologie_Finale),
         "ActionCorrective_IA": data.ActionCorrective_IA,
         "ActionCorrective_Finale": data.ActionCorrective_Finale,
         "MesureEfficacite_IA": data.MesureEfficacite_IA,
         "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
         "ModifieParHumain": normalize_bool(data.ModifieParHumain),
         "QualiteCas": normalize_qualite(data.QualiteCas),
-        "Tags": data.Tags,
-        "NomFichierSource": data.NomFichierSource,
+        "Tags": short_text(data.Tags),
+        "NomFichierSource": short_text(data.NomFichierSource),
     }
 
 
 def build_sharepoint_update_fields(data: MemoireUpdatePayload):
+    constat = str(data.Constat or "")
     fields = {
-        "Title": data.Constat,
-        "Source": data.Source,
-        "Activite": data.Activite,
+        "Title": constat[:255],
+        "ActionImmediate_IA": constat,
+        "Source": short_text(data.Source),
+        "Activite": short_text(data.Activite),
         "DateCas": data.DateCas,
         "ActionImmediate_Finale": data.ActionImmediate_Finale,
         "Analyse_Finale": data.Analyse_Finale,
-        "Typologie_Finale": data.Typologie_Finale,
+        "Typologie_Finale": short_text(data.Typologie_Finale),
         "ActionCorrective_Finale": data.ActionCorrective_Finale,
         "MesureEfficacite_Finale": data.MesureEfficacite_Finale,
         "ModifieParHumain": True,
-        "Tags": data.Tags,
+        "Tags": short_text(data.Tags),
     }
     if data.NomFichierSource:
-        fields["NomFichierSource"] = data.NomFichierSource
+        fields["NomFichierSource"] = short_text(data.NomFichierSource)
     return fields
 
 
@@ -251,48 +262,55 @@ def shared_keyword_score(a, b, weight, cap):
 
 def score_case(constat, source, activite, fields):
     score = 0
-    title = fields.get("Title", "")
-    old_source = fields.get("Source", "")
-    old_activite = fields.get("Activite", "")
+    title = normalize_text(full_constat(fields))
+    old_activite = normalize_text(fields.get("Activite", ""))
+    old_source = normalize_text(fields.get("Source", ""))
+    tags = normalize_text(fields.get("Tags", ""))
+    action_immediate_finale = normalize_text(fields.get("ActionImmediate_Finale", ""))
+    analyse_finale = normalize_text(fields.get("Analyse_Finale", ""))
+    typologie_finale = normalize_text(fields.get("Typologie_Finale", ""))
+    action_corrective_finale = normalize_text(fields.get("ActionCorrective_Finale", ""))
+    mesure_finale = normalize_text(fields.get("MesureEfficacite_Finale", ""))
 
-    if normalize_text(source) and normalize_text(source) == normalize_text(old_source):
+    if normalize_text(source) and normalize_text(source) == old_source:
         score += 45
     else:
         score += shared_keyword_score(source, old_source, 10, 30)
 
-    if normalize_text(activite) and normalize_text(activite) == normalize_text(old_activite):
+    if normalize_text(activite) and normalize_text(activite) == old_activite:
         score += 25
     else:
         score += shared_keyword_score(activite, old_activite, 5, 15)
 
     constat_keywords = extract_keywords(constat)
-    searchable = {
-        "title": normalize_text(title),
-        "analyse": normalize_text(fields.get("Analyse_Finale", "")),
-        "typologie": normalize_text(fields.get("Typologie_Finale", "")),
-        "corrective": normalize_text(fields.get("ActionCorrective_Finale", "")),
-        "immediate": normalize_text(fields.get("ActionImmediate_Finale", "")),
-        "mesure": normalize_text(fields.get("MesureEfficacite_Finale", "")),
-        "tags": normalize_text(fields.get("Tags", "")),
-    }
     for mot in constat_keywords:
-        if mot in searchable["title"]:
+        if mot in title:
             score += 10
-        if mot in searchable["analyse"]:
+        if mot in analyse_finale:
             score += 6
-        if mot in searchable["typologie"]:
+        if mot in typologie_finale:
             score += 4
-        if mot in searchable["corrective"]:
+        if mot in action_corrective_finale:
             score += 4
-        if mot in searchable["immediate"]:
+        if mot in action_immediate_finale:
             score += 3
-        if mot in searchable["mesure"]:
+        if mot in mesure_finale:
             score += 2
-        if mot in searchable["tags"]:
+        if mot in tags:
             score += 2
 
     constat_norm = normalize_text(constat)
-    bloc = " ".join(searchable.values())
+    bloc = " ".join([
+        title,
+        old_activite,
+        old_source,
+        tags,
+        action_immediate_finale,
+        analyse_finale,
+        typologie_finale,
+        action_corrective_finale,
+        mesure_finale,
+    ])
     if constat_norm and constat_norm in bloc:
         score += 12
     if normalize_bool(fields.get("ModifieParHumain", False)):
@@ -304,7 +322,7 @@ def build_memory_context(constat, source, activite, items, limit=5):
     scored = []
     for item in items:
         fields = item.get("fields", {})
-        if not str(fields.get("Title", "")).strip():
+        if not full_constat(fields).strip():
             continue
         score = score_case(constat, source, activite, fields)
         if score > 0:
@@ -319,7 +337,7 @@ def build_memory_context(constat, source, activite, items, limit=5):
         blocks.append(
             f"CAS REEL {rank}:\n"
             f"Score pertinence: {score}\n"
-            f"Constat: {f.get('Title', '')}\n"
+            f"Constat: {full_constat(f)}\n"
             f"Source: {f.get('Source', '')}\n"
             f"Activite: {f.get('Activite', '')}\n"
             f"Action immédiate finale: {f.get('ActionImmediate_Finale', '')}\n"
@@ -490,13 +508,3 @@ def memoire_update(data: MemoireUpdatePayload, request: Request):
     url = f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}/lists/{LIST_ID}/items/{item_id}/fields"
     graph_json("PATCH", url, access_token, json=fields)
     return {"status": "ok", "id": item_id}
-
-
-try:
-    import json
-    from memory_snapshot import snapshot_memory
-    print("MEMORY_SNAPSHOT_BEGIN")
-    print(json.dumps(snapshot_memory(), ensure_ascii=False))
-    print("MEMORY_SNAPSHOT_END")
-except Exception as snapshot_exc:
-    print("MEMORY_SNAPSHOT_ERROR", repr(snapshot_exc))
