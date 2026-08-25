@@ -25,51 +25,22 @@ def snapshot_memory():
     token = token_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    columns_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_id}/columns"
-    col_resp = requests.get(columns_url, headers=headers, timeout=30)
-    col_resp.raise_for_status()
-    for col in col_resp.json().get("value", []):
-        details = {}
-        for kind in ("text", "choice", "dateTime", "boolean", "number", "lookup", "personOrGroup"):
-            if kind in col:
-                details = {"kind": kind, "settings": col.get(kind)}
-                break
-        print("COLUMN_ITEM " + json.dumps({
-            "name": col.get("name"),
-            "displayName": col.get("displayName"),
-            **details,
-        }, ensure_ascii=False), flush=True)
-
     url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_id}/items?$expand=fields&$top=200"
-    rows = []
+    count = 0
     while url:
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
-        for item in data.get("value", []):
-            f = item.get("fields", {})
-            row = {
-                "id": str(item.get("id", "")),
-                "Title": f.get("Title", ""),
-                "Source": f.get("Source", ""),
-                "Activite": f.get("Activite", ""),
-                "DateCas": f.get("DateCas", ""),
-                "ActionImmediate_Finale": f.get("ActionImmediate_Finale", ""),
-                "Analyse_Finale": f.get("Analyse_Finale", ""),
-                "Typologie_Finale": f.get("Typologie_Finale", ""),
-                "ActionCorrective_Finale": f.get("ActionCorrective_Finale", ""),
-                "MesureEfficacite_Finale": f.get("MesureEfficacite_Finale", ""),
-                "NomFichierSource": f.get("NomFichierSource", ""),
-                "Tags": f.get("Tags", ""),
-            }
-            rows.append(row)
-            print("MEMORY_ITEM " + json.dumps(row, ensure_ascii=False), flush=True)
+        count += len(data.get("value", []))
         url = data.get("@odata.nextLink")
 
-    result = {"status": "ok", "count": len(rows)}
+    result = {"status": "ok", "count": count}
     if os.getenv("RECONCILE_RUN", "") == "1":
         from reconcile_memory import reconcile_once
         result["reconciliation"] = reconcile_once()
+    if os.getenv("WRITE_IDS_RUN", "") == "1":
+        from write_ids_workbook import write_ids_once
+        result["workbook_ids"] = write_ids_once()
     return result
 
 
