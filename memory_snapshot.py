@@ -24,6 +24,22 @@ def snapshot_memory():
     token_response.raise_for_status()
     token = token_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+
+    columns_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_id}/columns"
+    col_resp = requests.get(columns_url, headers=headers, timeout=30)
+    col_resp.raise_for_status()
+    for col in col_resp.json().get("value", []):
+        details = {}
+        for kind in ("text", "choice", "dateTime", "boolean", "number", "lookup", "personOrGroup"):
+            if kind in col:
+                details = {"kind": kind, "settings": col.get(kind)}
+                break
+        print("COLUMN_ITEM " + json.dumps({
+            "name": col.get("name"),
+            "displayName": col.get("displayName"),
+            **details,
+        }, ensure_ascii=False), flush=True)
+
     url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_id}/items?$expand=fields&$top=200"
     rows = []
     while url:
@@ -47,7 +63,7 @@ def snapshot_memory():
                 "Tags": f.get("Tags", ""),
             }
             rows.append(row)
-            print("MEMORY_ITEM " + json.dumps(row, ensure_ascii=False))
+            print("MEMORY_ITEM " + json.dumps(row, ensure_ascii=False), flush=True)
         url = data.get("@odata.nextLink")
 
     result = {"status": "ok", "count": len(rows)}
