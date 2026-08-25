@@ -49,7 +49,12 @@ def snapshot_memory():
             rows.append(row)
             print("MEMORY_ITEM " + json.dumps(row, ensure_ascii=False))
         url = data.get("@odata.nextLink")
-    return {"status": "ok", "count": len(rows)}
+
+    result = {"status": "ok", "count": len(rows)}
+    if os.getenv("RECONCILE_RUN", "") == "1":
+        from reconcile_memory import reconcile_once
+        result["reconciliation"] = reconcile_once()
+    return result
 
 
 if __name__ == "__main__":
