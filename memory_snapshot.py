@@ -32,7 +32,7 @@ def snapshot_memory():
         data = response.json()
         for item in data.get("value", []):
             f = item.get("fields", {})
-            rows.append({
+            row = {
                 "id": str(item.get("id", "")),
                 "Title": f.get("Title", ""),
                 "Source": f.get("Source", ""),
@@ -45,9 +45,11 @@ def snapshot_memory():
                 "MesureEfficacite_Finale": f.get("MesureEfficacite_Finale", ""),
                 "NomFichierSource": f.get("NomFichierSource", ""),
                 "Tags": f.get("Tags", ""),
-            })
+            }
+            rows.append(row)
+            print("MEMORY_ITEM " + json.dumps(row, ensure_ascii=False))
         url = data.get("@odata.nextLink")
-    return {"status": "ok", "count": len(rows), "items": rows}
+    return {"status": "ok", "count": len(rows)}
 
 
 if __name__ == "__main__":
