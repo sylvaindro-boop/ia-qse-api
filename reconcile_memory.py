@@ -23,26 +23,22 @@ def _date_key(value):
 def _slug(value):
     text = _norm(value)
     text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-    return text[:120]
+    return text[:100]
 
 
 def _excel_fields(action, source_name):
     constat = str(action.get("Constat", "") or "")
+    # Tags is a SharePoint single-line text column (255 chars). Keep it compact;
+    # all authoritative Excel values remain in their dedicated fields.
     tags = [
         action.get("Source", ""),
         action.get("Activite", ""),
         action.get("Typologie", ""),
         "excel-master",
-        f"action-necessaire-{action.get('ActionCorrectiveNecessaire', '')}",
-        f"resp-{action.get('Responsable', '')}",
-        f"delai-{action.get('Delai', '')}",
+        f"action-{action.get('ActionCorrectiveNecessaire', '')}",
         f"statut-{action.get('Statut', '')}",
-        f"redacteur-{action.get('Redacteur', '')}",
-        f"date-efficacite-{action.get('DateEfficacite', '')}",
     ]
-    if action.get("Commentaire"):
-        tags.append("avec-commentaire")
-    tags = ";".join(x for x in (_slug(v) for v in tags) if x)
+    tag_text = ";".join(x for x in (_slug(v) for v in tags) if x)[:255]
     return {
         "Title": constat[:255],
         # Technical full-constat storage: this is a multiline field and Excel has no
@@ -63,7 +59,7 @@ def _excel_fields(action, source_name):
         "MesureEfficacite_Finale": action.get("MesureEfficacite", ""),
         "ModifieParHumain": True,
         "QualiteCas": "Bon",
-        "Tags": tags,
+        "Tags": tag_text,
         "NomFichierSource": source_name,
     }
 
@@ -265,17 +261,20 @@ def reconcile_once():
         row = int(action["row"])
         fields = _excel_fields(action, source_name)
         item_id = assigned.get(row)
-        if item_id:
-            _request("PATCH", f"{base}/{item_id}/fields", token, json=fields)
-            updated += 1
-        else:
-            detail = _request("POST", base, token, json={"fields": fields})
-            item_id = str(detail.get("id", "")).strip()
-            if not item_id:
-                raise RuntimeError(f"creation without id for Excel row {row}")
-            assigned[row] = item_id
-            used_ids.add(item_id)
-            created += 1
+        try:
+            if item_id:
+                _request("PATCH", f"{base}/{item_id}/fields", token, json=fields)
+                updated += 1
+            else:
+                detail = _request("POST", base, token, json={"fields": fields})
+                item_id = str(detail.get("id", "")).strip()
+                if not item_id:
+                    raise RuntimeError(f"creation without id for Excel row {row}")
+                assigned[row] = item_id
+                used_ids.add(item_id)
+                created += 1
+        except Exception as exc:
+            raise RuntimeError(f"Excel row {row}: {exc}") from exc
         print("RECON_MAP " + json.dumps({"row": row, "id": item_id}, ensure_ascii=False), flush=True)
 
     # Excel is the master: every pre-existing list item not assigned to an Excel row is removed.
